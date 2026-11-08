@@ -45,7 +45,13 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--market", default="ALL", choices=["KR", "US", "ALL"])
     ap.add_argument("--dry-run", action="store_true", help="알림 안 보내고 출력만")
+    ap.add_argument("--ping", action="store_true", help="연결 테스트 알림 1개만 보내고 종료")
     args = ap.parse_args(argv)
+
+    if args.ping:
+        ok = send("알리미 테스트", "ntfy 연결 OK. 이 알림이 보이면 설정 끝.", "high")
+        print("sent" if ok else "FAILED — NTFY_TOPIC 환경변수 확인")
+        return 0 if ok else 1
 
     rules_doc = yaml.safe_load(RULES.read_text(encoding="utf-8"))
     state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
