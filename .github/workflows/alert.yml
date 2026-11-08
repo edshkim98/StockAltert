@@ -1,0 +1,54 @@
+name: stock-alert
+
+on:
+  schedule:
+    # UTC. 월~금.
+    - cron: "10 0 * * 1-5"   # 09:10 KST  한국 개장 직후
+    - cron: "0 6 * * 1-5"    # 15:00 KST  한국 마감 30분 전
+    - cron: "40 14 * * 1-5"  # 09:40 ET   미국 개장 직후 (EST 기준; 서머타임엔 10:40)
+    - cron: "50 20 * * 1-5"  # 15:50 ET   미국 마감 10분 전
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "KR | US | ALL"
+        default: "ALL"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stock-alert
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Pick market by hour
+        id: m
+        run: |
+          if [ -n "${{ github.event.inputs.market }}" ]; then echo "market=${{ github.event.inputs.market }}" >> $GITHUB_OUTPUT; exit 0; fi
+          H=$(date -u +%H)
+          if [ "$H" -lt 12 ]; then echo "market=KR" >> $GITHUB_OUTPUT; else echo "market=US" >> $GITHUB_OUTPUT; fi
+
+      - name: Run
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.main --market ${{ steps.m.outputs.market }}
+
+      - name: Persist state
+        run: |
+          git config user.name "stock-alert-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet || git commit -m "state $(date -u +%F_%H%M)" && git push
